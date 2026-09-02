@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Control de Asistencia QR - 5 Cursos</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 14px;
+      color: #f1f5f9;
+    }
+
+    header {
+      width: 100%;
+      max-width: 480px;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    header h1 {
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+
+    header p {
+      font-size: 0.82rem;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+
+    .panel-config {
+      width: 100%;
+      max-width: 480px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      padding: 12px;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .form-group label {
+      font-size: 0.72rem;
+      color: #94a3b8;
+      margin-bottom: 3px;
+      font-weight: 600;
+    }
+
+    .form-control {
+      width: 100%;
+      padding: 7px 8px;
+      border-radius: 8px;
+      background: #334155;
+      color: #ffffff;
+      border: 1px solid #475569;
+      font-size: 0.85rem;
+      font-weight: 600;
+      outline: none;
+    }
+
+    .confirmacion-hora {
+      font-size: 0.7rem;
+      color: #4ade80;
+      margin-top: 3px;
+      font-weight: 700;
+      min-height: 14px;
+    }
+
+    .contenedor-camara {
+      width: 100%;
+      max-width: 480px;
+      background: #000;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      position: relative;
+      border: 3px solid #334155;
+    }
+
+    .marco-escaneo {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 65%;
+      max-width: 260px;
+      aspect-ratio: 1 / 1;
+      pointer-events: none;
+      z-index: 5;
+    }
+    .marco-escaneo span {
+      position: absolute;
+      width: 32px;
+      height: 32px;
+      border: 4px solid #ffffff;
+    }
+    .marco-escaneo .esq-tl { top: 0; left: 0; border-right: none; border-bottom: none; }
+    .marco-escaneo .esq-tr { top: 0; right: 0; border-left: none; border-bottom: none; }
+    .marco-escaneo .esq-bl { bottom: 0; left: 0; border-right: none; border-top: none; }
+    .marco-escaneo .esq-br { bottom: 0; right: 0; border-left: none; border-top: none; }
+
+    #reader {
+      width: 100% !important;
+    }
+
+    .controles {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    button.control-btn {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      border-radius: 8px;
+      background: #334155;
+      color: #f1f5f9;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    button.control-btn:active {
+      background: #475569;
+    }
+
+    .boton-cierre {
+      width: 100%;
+      max-width: 480px;
+      margin-top: 8px;
+    }
+
+    button.btn-cerrar {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      background: #7c2d12;
+      color: #fed7aa;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
+    button.btn-cerrar:active {
+      background: #9a3412;
+    }
+
+    #panelResultado {
+      width: 100%;
+      max-width: 480px;
+      margin-top: 12px;
+      padding: 14px;
+      border-radius: 12px;
+      text-align: center;
+      display: none;
+      animation: aparecer 0.25s ease-out;
+    }
+
+    @keyframes aparecer {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .resultado-exito { background: #16a34a; color: white; }
+    .resultado-advertencia { background: #f59e0b; color: #1c1917; }
+    .resultado-error { background: #dc2626; color: white; }
+
+    #panelResultado .icono { font-size: 1.8rem; margin-bottom: 2px; }
+    #panelResultado .nombre { font-size: 1.05rem; font-weight: 700; }
+    #panelResultado .mensaje { font-size: 0.85rem; opacity: 0.95; }
+    #panelResultado .hora { font-size: 0.75rem; margin-top: 4px; opacity: 0.85; font-weight: 600; }
+
+    .estado-carga {
+      text-align: center;
+      color: #94a3b8;
+      font-size: 0.82rem;
+      margin-top: 8px;
+      min-height: 18px;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #475569;
+      border-top-color: #38bdf8;
+      border-radius: 50%;
+      animation: girar 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 4px;
+    }
+
+    @keyframes girar {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>📋 Control de Asistencia QR</h1>
+    <p>Selecciona tu curso e inicia el escaneo</p>
+  </header>
+
+  <div class="panel-config">
+    <div class="form-group">
+      <label>Curso:</label>
+      <select id="selCurso" class="form-control">
+        <option value="3RO B">3ro de Secundaria B</option>
+        <option value="3RO C">3ro de Secundaria C</option>
+        <option value="4TO B">4to de Secundaria B</option>
+        <option value="5TO B">5to de Secundaria B</option>
+        <option value="6TO B">6to de Secundaria B</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Trimestre:</label>
+      <select id="selTrimestre" class="form-control">
+        <option value="1ER">1er Trimestre</option>
+        <option value="2DO">2do Trimestre</option>
+        <option value="3ER">3er Trimestre</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Turno:</label>
+      <select id="selTurno" class="form-control">
+        <option value="manana">Mañana</option>
+        <option value="tarde">Tarde</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label>Tolerancia (min):</label>
+      <input type="number" id="tolerancia" value="5" min="0" max="120" class="form-control">
+    </div>
+    <div class="form-group">
+      <label>Hora Inicio:</label>
+      <input type="time" id="horaInicio" value="08:00" class="form-control">
+      <div class="confirmacion-hora" id="confirmInicio"></div>
+    </div>
+    <div class="form-group">
+      <label>Fin Periodo:</label>
+      <input type="time" id="horaFin" value="09:30" class="form-control">
+      <div class="confirmacion-hora" id="confirmFin"></div>
+    </div>
+  </div>
+
+  <div class="contenedor-camara">
+    <div id="reader"></div>
+    <div class="marco-escaneo">
+      <span class="esq-tl"></span>
+      <span class="esq-tr"></span>
+      <span class="esq-bl"></span>
+      <span class="esq-br"></span>
+    </div>
+  </div>
+
+  <div class="controles">
+    <button class="control-btn" id="btnCambiarCamara">🔄 Cambiar cámara</button>
+    <button class="control-btn" id="btnPausar">⏸️ Pausar</button>
+  </div>
+
+  <div class="boton-cierre">
+    <button class="btn-cerrar" id="btnCerrar">🔒 Cerrar Asistencia (marcar faltas)</button>
+  </div>
+
+  <div id="panelResultado"></div>
+  <div class="estado-carga" id="estadoCarga"></div>
+
+  <script>
+    // -------------------------------------------------------------
+    // PEGA AQUÍ TU URL DE LA APLICACIÓN WEB DE APPS SCRIPT (/exec)
+    // -------------------------------------------------------------
+    const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbxfpAgEthhBQS8R1QyrbwtYFdkPt7BEDG0GGWDCEbQT97sRkaXBxiRszQ7OGWE3FlfL6w/exec";
+
+    // ---------------- Confirmación visual de AM/PM ----------------
+    function formatearHoraLegible(valor24h) {
+      if (!valor24h) return '';
+      const [h, m] = valor24h.split(':').map(Number);
+      const periodo = h < 12 ? 'a.m.' : 'p.m.';
+      let h12 = h % 12;
+      if (h12 === 0) h12 = 12;
+      return `→ Seleccionado: ${h12}:${m.toString().padStart(2, '0')} ${periodo}`;
+    }
+
+    function actualizarConfirmacion(inputId, confirmId) {
+      const input = document.getElementById(inputId);
+      const confirm = document.getElementById(confirmId);
+      confirm.textContent = formatearHoraLegible(input.value);
+    }
+
+    document.getElementById('horaInicio').addEventListener('input', () => actualizarConfirmacion('horaInicio', 'confirmInicio'));
+    document.getElementById('horaFin').addEventListener('input', () => actualizarConfirmacion('horaFin', 'confirmFin'));
+    actualizarConfirmacion('horaInicio', 'confirmInicio');
+    actualizarConfirmacion('horaFin', 'confirmFin');
+
+    let escaner = null;
+    let camaras = [];
+    let indiceCamaraActual = 0;
+    let escaneoBloqueado = false;
+    let pausado = false;
+
+    const panelResultado = document.getElementById('panelResultado');
+    const estadoCarga = document.getElementById('estadoCarga');
+    const btnCambiarCamara = document.getElementById('btnCambiarCamara');
+    const btnPausar = document.getElementById('btnPausar');
+    const btnCerrar = document.getElementById('btnCerrar');
+
+    function reproducirBeep(tipo) {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const contexto = new AudioContext();
+        const osc = contexto.createOscillator();
+        const gain = contexto.createGain();
+        osc.connect(gain);
+        gain.connect(contexto.destination);
+
+        osc.frequency.value = tipo === 'exito' ? 880 : (tipo === 'advertencia' ? 580 : 300);
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.15, contexto.currentTime);
+        osc.start();
+        osc.stop(contexto.currentTime + (tipo === 'exito' ? 0.15 : 0.25));
+      } catch (e) {}
+    }
+
+    // ---------------- Escaneo: nativo (rápido) o librería (respaldo) ----------------
+    let usandoNativo = false;
+    let videoNativo = null;
+    let streamNativo = null;
+    let detectorNativo = null;
+    let animFrameId = null;
+
+    async function soportaBarcodeDetectorQR() {
+      if (!('BarcodeDetector' in window)) return false;
+      try {
+        const formatos = await BarcodeDetector.getSupportedFormats();
+        return formatos.includes('qr_code');
+      } catch (e) {
+        return false;
+      }
+    }
+
+    async function iniciarEscaner(camaraId) {
+      const soportaNativo = await soportaBarcodeDetectorQR();
+      if (soportaNativo) {
+        usandoNativo = true;
+        try {
+          await iniciarEscaneoNativo(camaraId);
+        } catch (e) {
+          usandoNativo = false;
+          iniciarEscaneoHtml5Qrcode(camaraId);
+        }
+      } else {
+        usandoNativo = false;
+        iniciarEscaneoHtml5Qrcode(camaraId);
+      }
+    }
+
+    async function iniciarEscaneoNativo(camaraId) {
+      const contenedor = document.getElementById('reader');
+      contenedor.innerHTML = '';
+      videoNativo = document.createElement('video');
+      videoNativo.setAttribute('playsinline', true);
+      videoNativo.setAttribute('muted', true);
+      videoNativo.style.width = '100%';
+      videoNativo.style.display = 'block';
+      contenedor.appendChild(videoNativo);
+
+      streamNativo = await navigator.mediaDevices.getUserMedia({
+        video: { deviceId: { exact: camaraId } }
+      });
+      videoNativo.srcObject = streamNativo;
+      await videoNativo.play();
+
+      detectorNativo = new BarcodeDetector({ formats: ['qr_code'] });
+      bucleDeteccionNativa();
+    }
+
+    function bucleDeteccionNativa() {
+      if (!usandoNativo) return;
+      if (escaneoBloqueado || pausado) {
+        animFrameId = requestAnimationFrame(bucleDeteccionNativa);
+        return;
+      }
+      detectorNativo.detect(videoNativo).then(codigos => {
+        if (codigos.length > 0) {
+          onLecturaExitosa(codigos[0].rawValue);
+        }
+      }).catch(() => {});
+      animFrameId = requestAnimationFrame(bucleDeteccionNativa);
+    }
+
+    function detenerEscaneoNativo() {
+      usandoNativo = false;
+      if (animFrameId) cancelAnimationFrame(animFrameId);
+      if (streamNativo) streamNativo.getTracks().forEach(t => t.stop());
+    }
+
+    function iniciarEscaneoHtml5Qrcode(camaraId) {
+      escaner = new Html5Qrcode("reader", { formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE] });
+      const config = { fps: 20, qrbox: { width: 260, height: 260 }, aspectRatio: 1.0, disableFlip: false };
+      escaner.start(camaraId, config, onLecturaExitosa, () => {}).catch(err => {
+        mostrarResultado('error', 'Cámara', 'No se pudo abrir el lente: ' + err, '');
+      });
+    }
+
+    Html5Qrcode.getCameras().then(dispositivos => {
+      camaras = dispositivos;
+      if (camaras.length === 0) return;
+      indiceCamaraActual = camaras.findIndex(c => /back|trasera|rear|environment/i.test(c.label));
+      if (indiceCamaraActual === -1) indiceCamaraActual = 0;
+      iniciarEscaner(camaras[indiceCamaraActual].id);
+    });
+
+    btnCambiarCamara.addEventListener('click', () => {
+      if (camaras.length < 2) return;
+      indiceCamaraActual = (indiceCamaraActual + 1) % camaras.length;
+
+      if (usandoNativo) {
+        detenerEscaneoNativo();
+        iniciarEscaner(camaras[indiceCamaraActual].id);
+      } else if (escaner) {
+        escaner.stop().then(() => {
+          escaner.clear();
+          iniciarEscaner(camaras[indiceCamaraActual].id);
+        });
+      }
+    });
+
+    btnPausar.addEventListener('click', () => {
+      pausado = !pausado;
+      btnPausar.textContent = pausado ? '▶️ Reanudar' : '⏸️ Pausar';
+      escaneoBloqueado = pausado;
+      if (!pausado) panelResultado.style.display = 'none';
+    });
+
+    function onLecturaExitosa(textoDecodificado) {
+      if (escaneoBloqueado || pausado) return;
+      escaneoBloqueado = true;
+      estadoCarga.innerHTML = '<span class="spinner"></span> Registrando...';
+
+      const curso = document.getElementById('selCurso').value;
+      const trimestre = document.getElementById('selTrimestre').value;
+      const turno = document.getElementById('selTurno').value;
+      const horaInicio = document.getElementById('horaInicio').value;
+      const horaFin = document.getElementById('horaFin').value;
+      const tolerancia = document.getElementById('tolerancia').value || '5';
+
+      const url = `${URL_APPS_SCRIPT}?codigo=${encodeURIComponent(textoDecodificado)}&curso=${encodeURIComponent(curso)}&trimestre=${encodeURIComponent(trimestre)}&turno=${encodeURIComponent(turno)}&horaInicio=${encodeURIComponent(horaInicio)}&horaFin=${encodeURIComponent(horaFin)}&tolerancia=${encodeURIComponent(tolerancia)}`;
+
+      fetch(url)
+        .then(res => res.text())
+        .then(texto => {
+          let data;
+          try {
+            data = JSON.parse(texto);
+          } catch (e) {
+            estadoCarga.textContent = '';
+            mostrarResultado('error', 'Respuesta inesperada', 'El servidor devolvió esto: ' + texto.substring(0, 200), '');
+            reproducirBeep('error');
+            setTimeout(() => { escaneoBloqueado = false; }, 5000);
+            return;
+          }
+          procesarRespuesta(data);
+        })
+        .catch(err => {
+          estadoCarga.textContent = '';
+          mostrarResultado('error', 'Conexión', 'Sin respuesta del servidor: ' + err, '');
+          reproducirBeep('error');
+          setTimeout(() => { escaneoBloqueado = false; }, 4000);
+        });
+    }
+
+    function procesarRespuesta(resp) {
+      estadoCarga.textContent = '';
+      const tipo = resp.tipo || (resp.exito ? 'exito' : 'error');
+      mostrarResultado(tipo, resp.nombre || 'Estudiante', resp.mensaje, resp.hora);
+      reproducirBeep(tipo);
+
+      setTimeout(() => {
+        escaneoBloqueado = false;
+        if (!pausado) panelResultado.style.display = 'none';
+      }, 2500);
+    }
+
+    // ---------------- Cierre de asistencia (marca F a quien no escaneó) ----------------
+    btnCerrar.addEventListener('click', () => {
+      const curso = document.getElementById('selCurso').value;
+      const trimestre = document.getElementById('selTrimestre').value;
+      const turno = document.getElementById('selTurno').value;
+
+      const confirmado = confirm(
+        `¿Cerrar asistencia de ${curso} - ${trimestre} (turno ${turno === 'tarde' ? 'TARDE' : 'MAÑANA'})?\n\n` +
+        `Se marcará "F" (Falta) a todos los estudiantes de este curso que no hayan escaneado hoy en este turno. Esta acción no se puede deshacer.`
+      );
+      if (!confirmado) return;
+
+      estadoCarga.innerHTML = '<span class="spinner"></span> Cerrando asistencia...';
+
+      const url = `${URL_APPS_SCRIPT}?accion=cerrar&curso=${encodeURIComponent(curso)}&trimestre=${encodeURIComponent(trimestre)}&turno=${encodeURIComponent(turno)}`;
+
+      fetch(url)
+        .then(res => res.json())
+        .then(data => {
+          estadoCarga.textContent = '';
+          const tipo = data.tipo || (data.exito ? 'exito' : 'error');
+          mostrarResultado(tipo, curso + ' - ' + trimestre, data.mensaje, '');
+          reproducirBeep(tipo);
+        })
+        .catch(() => {
+          estadoCarga.textContent = '';
+          mostrarResultado('error', 'Conexión', 'No se pudo cerrar la asistencia', '');
+        });
+    });
+
+    function mostrarResultado(tipo, nombre, mensaje, hora) {
+      const iconos = { exito: '✅', advertencia: '⚠️', error: '❌' };
+      panelResultado.className = 'resultado-' + tipo;
+      panelResultado.style.display = 'block';
+      panelResultado.innerHTML = `
+        <div class="icono">${iconos[tipo] || '❌'}</div>
+        <div class="nombre">${nombre}</div>
+        <div class="mensaje">${mensaje}</div>
+        ${hora ? `<div class="hora">🕒 ${hora}</div>` : ''}
+      `;
+    }
+  </script>
+</body>
+</html>
