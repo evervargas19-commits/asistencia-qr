@@ -38,6 +38,21 @@
       margin-top: 2px;
     }
 
+    .estado {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      padding: 6px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    .estado.online { background: #14532d; color: #bbf7d0; }
+    .estado.offline { background: #7c2d12; color: #fed7aa; }
+
     .panel-config {
       width: 100%;
       max-width: 480px;
@@ -166,6 +181,18 @@
       background: #9a3412;
     }
 
+    button.btn-pendientes {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 10px;
+      background: #92400e;
+      color: #fef3c7;
+      font-size: 0.9rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+
     #panelResultado {
       width: 100%;
       max-width: 480px;
@@ -222,6 +249,8 @@
     <h1>📋 Control de Asistencia QR</h1>
     <p>Selecciona tu curso e inicia el escaneo</p>
   </header>
+
+  <div class="estado" id="estadoConexion"></div>
 
   <div class="panel-config">
     <div class="form-group">
@@ -282,6 +311,10 @@
 
   <div class="boton-cierre">
     <button class="btn-cerrar" id="btnCerrar">🔒 Cerrar Asistencia (marcar faltas)</button>
+  </div>
+
+  <div class="boton-cierre" id="contenedorPendientes" style="display:none;">
+    <button class="btn-pendientes" id="btnSincronizarPendientes">📤 <span id="textoPendientes"></span></button>
   </div>
 
   <div id="panelResultado"></div>
@@ -455,11 +488,115 @@
       if (!pausado) panelResultado.style.display = 'none';
     });
 
+    // ---------------- Cola de escaneos pendientes (sin conexión) ----------------
+    const CLAVE_COLA = 'cola_escaneos_pendientes';
+
+    function obtenerCola() {
+      try {
+        return JSON.parse(localStorage.getItem(CLAVE_COLA)) || [];
+      } catch (e) {
+        return [];
+      }
+    }
+
+    function guardarCola(cola) {
+      localStorage.setItem(CLAVE_COLA, JSON.stringify(cola));
+      actualizarContadorPendientes();
+    }
+
+    function agregarACola(item) {
+      const cola = obtenerCola();
+      cola.push(item);
+      guardarCola(cola);
+    }
+
+    function actualizarContadorPendientes() {
+      const cola = obtenerCola();
+      const cont = document.getElementById('contenedorPendientes');
+      const texto = document.getElementById('textoPendientes');
+      if (cola.length > 0) {
+        cont.style.display = 'block';
+        texto.textContent = `${cola.length} escaneo(s) sin conexión pendientes de enviar`;
+      } else {
+        cont.style.display = 'none';
+      }
+    }
+
+    function construirUrlEscaneo(item) {
+      let url = `${URL_APPS_SCRIPT}?codigo=${encodeURIComponent(item.codigo)}&curso=${encodeURIComponent(item.curso)}&trimestre=${encodeURIComponent(item.trimestre)}&turno=${encodeURIComponent(item.turno)}&horaInicio=${encodeURIComponent(item.horaInicio)}&horaFin=${encodeURIComponent(item.horaFin)}&tolerancia=${encodeURIComponent(item.tolerancia)}`;
+      if (item.timestampOriginal) {
+        url += `&timestampOriginal=${encodeURIComponent(item.timestampOriginal)}`;
+      }
+      return url;
+    }
+
+    async function sincronizarPendientes(silencioso) {
+      const cola = obtenerCola();
+      if (cola.length === 0) {
+        if (!silencioso) mostrarResultado('advertencia', 'Nada pendiente', 'No hay escaneos por sincronizar', '');
+        return;
+      }
+      if (!navigator.onLine) {
+        if (!silencioso) mostrarResultado('error', 'Sin conexión', 'Sigues sin internet, no se pudo sincronizar', '');
+        return;
+      }
+
+      let enviados = 0;
+      let restantes = [];
+
+      for (const item of cola) {
+        try {
+          const resp = await fetch(construirUrlEscaneo(item));
+          const texto = await resp.text();
+          JSON.parse(texto); // valida que sea JSON; si falla, se queda en cola
+          enviados++;
+        } catch (e) {
+          restantes.push(item);
+        }
+      }
+
+      guardarCola(restantes);
+      mostrarResultado(
+        restantes.length === 0 ? 'exito' : 'advertencia',
+        'Sincronización',
+        `${enviados} escaneo(s) enviados. ${restantes.length} quedaron pendientes.`,
+        ''
+      );
+      reproducirBeep(restantes.length === 0 ? 'exito' : 'advertencia');
+    }
+
+    document.getElementById('btnSincronizarPendientes').addEventListener('click', () => sincronizarPendientes(false));
+
+    window.addEventListener('online', () => {
+      mostrarToastConexion();
+      sincronizarPendientes(true);
+    });
+
+    function mostrarToastConexion() {
+      actualizarEstadoConexion();
+    }
+
+    function actualizarEstadoConexion() {
+      const el = document.getElementById('estadoConexion');
+      if (navigator.onLine) {
+        el.className = 'estado online';
+        el.textContent = '🟢 En línea';
+      } else {
+        el.className = 'estado offline';
+        el.textContent = '🔴 Sin conexión — los escaneos se guardan y se envían solos después';
+      }
+    }
+    window.addEventListener('offline', actualizarEstadoConexion);
+    actualizarEstadoConexion();
+    actualizarContadorPendientes();
+
+    // ---------------- Lectura de QR ----------------
     function onLecturaExitosa(textoDecodificado) {
       if (escaneoBloqueado || pausado) return;
       escaneoBloqueado = true;
       estadoCarga.innerHTML = '<span class="spinner"></span> Registrando...';
 
+      const horaCapturada = new Date();
       const curso = document.getElementById('selCurso').value;
       const trimestre = document.getElementById('selTrimestre').value;
       const turno = document.getElementById('selTurno').value;
@@ -467,7 +604,17 @@
       const horaFin = document.getElementById('horaFin').value;
       const tolerancia = document.getElementById('tolerancia').value || '5';
 
-      const url = `${URL_APPS_SCRIPT}?codigo=${encodeURIComponent(textoDecodificado)}&curso=${encodeURIComponent(curso)}&trimestre=${encodeURIComponent(trimestre)}&turno=${encodeURIComponent(turno)}&horaInicio=${encodeURIComponent(horaInicio)}&horaFin=${encodeURIComponent(horaFin)}&tolerancia=${encodeURIComponent(tolerancia)}`;
+      const itemBase = {
+        codigo: textoDecodificado, curso, trimestre, turno, horaInicio, horaFin, tolerancia
+      };
+
+      // Si ya sabemos que no hay internet, ni intentamos — directo a la cola offline
+      if (!navigator.onLine) {
+        guardarSinConexion(itemBase, horaCapturada);
+        return;
+      }
+
+      const url = construirUrlEscaneo(itemBase);
 
       fetch(url)
         .then(res => res.text())
@@ -485,11 +632,24 @@
           procesarRespuesta(data);
         })
         .catch(err => {
-          estadoCarga.textContent = '';
-          mostrarResultado('error', 'Conexión', 'Sin respuesta del servidor: ' + err, '');
-          reproducirBeep('error');
-          setTimeout(() => { escaneoBloqueado = false; }, 4000);
+          // Falló la conexión en el momento del intento -> guardamos offline
+          guardarSinConexion(itemBase, horaCapturada);
         });
+    }
+
+    function guardarSinConexion(itemBase, horaCapturada) {
+      const item = Object.assign({}, itemBase, { timestampOriginal: horaCapturada.toISOString() });
+      agregarACola(item);
+
+      estadoCarga.textContent = '';
+      mostrarResultado('advertencia', 'Guardado sin conexión', 'Se enviará automáticamente cuando haya internet', Utilities_horaLocal(horaCapturada));
+      reproducirBeep('advertencia');
+      setTimeout(() => { escaneoBloqueado = false; }, 2500);
+    }
+
+    function Utilities_horaLocal(fecha) {
+      return fecha.toLocaleTimeString('es-BO', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    }
     }
 
     function procesarRespuesta(resp) {
