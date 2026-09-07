@@ -506,8 +506,23 @@
 
     function agregarACola(item) {
       const cola = obtenerCola();
+      const fechaItem = item.timestampOriginal.substring(0, 10); // yyyy-MM-dd
+
+      const yaExiste = cola.some(existente =>
+        existente.codigo === item.codigo &&
+        existente.curso === item.curso &&
+        existente.trimestre === item.trimestre &&
+        existente.turno === item.turno &&
+        existente.timestampOriginal.substring(0, 10) === fechaItem
+      );
+
+      if (yaExiste) {
+        return false; // ya estaba en la cola para ese mismo día/turno, no lo duplicamos
+      }
+
       cola.push(item);
       guardarCola(cola);
+      return true;
     }
 
     function actualizarContadorPendientes() {
@@ -639,12 +654,18 @@
 
     function guardarSinConexion(itemBase, horaCapturada) {
       const item = Object.assign({}, itemBase, { timestampOriginal: horaCapturada.toISOString() });
-      agregarACola(item);
+      const esNuevo = agregarACola(item);
 
       estadoCarga.textContent = '';
-      mostrarResultado('advertencia', 'Guardado sin conexión', 'Se enviará automáticamente cuando haya internet', Utilities_horaLocal(horaCapturada));
+      if (esNuevo) {
+        mostrarResultado('advertencia', 'Guardado sin conexión', 'Retira el carnet — se enviará solo cuando haya internet', Utilities_horaLocal(horaCapturada));
+      } else {
+        mostrarResultado('advertencia', 'Ya registrado (offline)', 'Este carnet ya está en la cola de hoy — retíralo', Utilities_horaLocal(horaCapturada));
+      }
       reproducirBeep('advertencia');
-      setTimeout(() => { escaneoBloqueado = false; }, 2500);
+      // Bloqueo más largo sin conexión, para dar tiempo a retirar el carnet
+      // antes de que la cámara pueda volver a leerlo por accidente.
+      setTimeout(() => { escaneoBloqueado = false; }, 4000);
     }
 
     function Utilities_horaLocal(fecha) {
