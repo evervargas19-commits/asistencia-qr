@@ -482,6 +482,28 @@
       } catch (e) {}
     }
 
+    // ---------------- Voz: dice en palabras qué se registró ----------------
+    // Útil para no tener que mirar la pantalla mientras controlas la fila.
+    function anunciarVoz(texto) {
+      try {
+        if (!('speechSynthesis' in window) || !texto) return;
+        window.speechSynthesis.cancel(); // corta el anuncio anterior si llegan escaneos seguidos
+        const utterance = new SpeechSynthesisUtterance(texto);
+        utterance.lang = 'es-ES';
+        utterance.rate = 1.1;
+        utterance.volume = 1;
+        window.speechSynthesis.speak(utterance);
+      } catch (e) {}
+    }
+
+    function textoParaVoz(resp) {
+      const nombresMarca = { P: 'Puntual', A: 'Atraso', F: 'Falta', L: 'Licencia' };
+      if (resp.marca && nombresMarca[resp.marca]) return nombresMarca[resp.marca];
+      if (resp.tipo === 'advertencia') return 'Ya registrado';
+      if (resp.tipo === 'error') return 'Error';
+      return 'Registrado';
+    }
+
     // ---------------- Escaneo: nativo (rápido) o librería (respaldo) ----------------
     let usandoNativo = false;
     let videoNativo = null;
@@ -819,8 +841,10 @@
       estadoCarga.textContent = '';
       if (esNuevo) {
         mostrarResultado('advertencia', 'Guardado sin conexión', 'Retira el carnet — se enviará solo cuando haya internet', Utilities_horaLocal(horaCapturada));
+        anunciarVoz('Guardado');
       } else {
         mostrarResultado('advertencia', 'Ya registrado (offline)', 'Este carnet ya está en la cola de hoy — retíralo', Utilities_horaLocal(horaCapturada));
+        anunciarVoz('Ya registrado');
       }
       reproducirBeep('advertencia');
       // Bloqueo más largo sin conexión, para dar tiempo a retirar el carnet
@@ -837,6 +861,7 @@
       const tipo = resp.tipo || (resp.exito ? 'exito' : 'error');
       mostrarResultado(tipo, resp.nombre || 'Estudiante', resp.mensaje, resp.hora);
       reproducirBeep(tipo);
+      anunciarVoz(textoParaVoz(resp));
 
       setTimeout(() => {
         escaneoBloqueado = false;
