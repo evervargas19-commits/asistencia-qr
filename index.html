@@ -484,11 +484,51 @@
 
     // ---------------- Voz: dice en palabras qué se registró ----------------
     // Útil para no tener que mirar la pantalla mientras controlas la fila.
+    //
+    // Los celulares (sobre todo iPhone) bloquean cualquier audio programado
+    // hasta que detectan un toque REAL tuyo en la pantalla. Como la voz se
+    // dispara sola cuando la cámara lee un QR (no cuando tocas algo), el
+    // navegador la silencia la primera vez si nunca "desbloqueaste" el audio.
+    // Por eso escuchamos el primer toque en toda la página y aprovechamos
+    // ese gesto para desbloquear el audio antes de que se necesite.
+    let audioDesbloqueado = false;
+    function desbloquearAudio() {
+      if (audioDesbloqueado) return;
+      audioDesbloqueado = true;
+      try {
+        if ('speechSynthesis' in window) {
+          const aviso = new SpeechSynthesisUtterance(' ');
+          aviso.volume = 0;
+          window.speechSynthesis.speak(aviso);
+        }
+      } catch (e) {}
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (AudioContext) {
+          const ctx = new AudioContext();
+          if (ctx.state === 'suspended') ctx.resume();
+        }
+      } catch (e) {}
+    }
+    document.addEventListener('click', desbloquearAudio, { once: true });
+    document.addEventListener('touchstart', desbloquearAudio, { once: true });
+
+    function obtenerVozEspanol() {
+      try {
+        const voces = window.speechSynthesis.getVoices();
+        return voces.find(v => v.lang && v.lang.toLowerCase().startsWith('es')) || null;
+      } catch (e) {
+        return null;
+      }
+    }
+
     function anunciarVoz(texto) {
       try {
         if (!('speechSynthesis' in window) || !texto) return;
         window.speechSynthesis.cancel(); // corta el anuncio anterior si llegan escaneos seguidos
         const utterance = new SpeechSynthesisUtterance(texto);
+        const voz = obtenerVozEspanol();
+        if (voz) utterance.voice = voz;
         utterance.lang = 'es-ES';
         utterance.rate = 1.1;
         utterance.volume = 1;
