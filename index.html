@@ -23,7 +23,7 @@
 
     header {
       width: 100%;
-      max-width: 480px;
+      max-width: 420px;
       text-align: center;
       margin-bottom: 12px;
     }
@@ -42,7 +42,7 @@
 
     .estado {
       width: 100%;
-      max-width: 480px;
+      max-width: 420px;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -57,7 +57,7 @@
 
     .panel-config {
       width: 100%;
-      max-width: 480px;
+      max-width: 420px;
       background: #1e293b;
       border: 1px solid #334155;
       padding: 12px;
@@ -78,6 +78,12 @@
       color: #94a3b8;
       margin-bottom: 3px;
       font-weight: 600;
+    }
+
+    /* El último campo (Fin Periodo) ocupa las 2 columnas, para que
+       la cuadrícula quede pareja ahora que son 5 campos, no 6. */
+    .panel-config .form-group:last-child {
+      grid-column: 1 / -1;
     }
 
     .form-control {
@@ -102,13 +108,25 @@
 
     .contenedor-camara {
       width: 100%;
-      max-width: 480px;
+      max-width: 420px;
+      /* Antes esto se estiraba a lo alto según la resolución nativa de
+         la cámara (en tablets se veía enorme). Con aspect-ratio fijo,
+         siempre queda un cuadro del mismo tamaño relativo al ancho. */
+      aspect-ratio: 1 / 1;
+      margin: 0 auto;
       background: #000;
       border-radius: 16px;
       overflow: hidden;
       box-shadow: 0 8px 24px rgba(0,0,0,0.4);
       position: relative;
       border: 3px solid #334155;
+    }
+
+    .contenedor-camara video,
+    .contenedor-camara canvas {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover;
     }
 
     .marco-escaneo {
@@ -135,11 +153,12 @@
 
     #reader {
       width: 100% !important;
+      height: 100% !important;
     }
 
     .controles {
       width: 100%;
-      max-width: 480px;
+      max-width: 420px;
       display: flex;
       gap: 8px;
       margin-top: 10px;
@@ -163,7 +182,7 @@
 
     .boton-cierre {
       width: 100%;
-      max-width: 480px;
+      max-width: 420px;
       margin-top: 8px;
     }
 
@@ -197,7 +216,7 @@
 
     .panel-manual {
       width: 100%;
-      max-width: 480px;
+      max-width: 420px;
       background: #1e293b;
       border: 1px solid #334155;
       border-radius: 12px;
@@ -231,7 +250,7 @@
 
     #panelResultado {
       width: 100%;
-      max-width: 480px;
+      max-width: 420px;
       margin-top: 12px;
       padding: 14px;
       border-radius: 12px;
@@ -315,10 +334,6 @@
       </select>
     </div>
     <div class="form-group">
-      <label>Tolerancia (min):</label>
-      <input type="number" id="tolerancia" value="5" min="0" max="120" class="form-control">
-    </div>
-    <div class="form-group">
       <label>Hora Inicio:</label>
       <input type="time" id="horaInicio" value="08:00" class="form-control">
       <div class="confirmacion-hora" id="confirmInicio"></div>
@@ -345,26 +360,29 @@
     <button class="control-btn" id="btnPausar">⏸️ Pausar</button>
   </div>
 
-  <div class="boton-cierre">
-    <button class="btn-cerrar" id="btnCerrar">🔒 Cerrar Asistencia (marcar faltas)</button>
+  <!-- Uso típico: ya llamaste lista (o escaneaste a los que llegaron a
+       tiempo) → aquí registras rápido a los que llegan tarde o traen
+       licencia, sin cámara ni cálculos de hora. -->
+  <div class="panel-manual">
+    <h2>✋ Atrasos y licencias (después de llamar lista)</h2>
+    <div class="form-group">
+      <label>N° de lista del estudiante:</label>
+      <input type="number" id="nroManual" class="form-control" placeholder="Ej: 5" min="1">
+    </div>
+    <div class="botones-manual">
+      <button class="btn-manual btn-a" data-marca="A">Atraso</button>
+      <button class="btn-manual btn-l" data-marca="L">Licencia</button>
+      <button class="btn-manual btn-p" data-marca="P">Puntual</button>
+      <button class="btn-manual btn-f" data-marca="F">Falta</button>
+    </div>
   </div>
 
   <div class="boton-cierre" id="contenedorPendientes" style="display:none;">
     <button class="btn-pendientes" id="btnSincronizarPendientes">📤 <span id="textoPendientes"></span></button>
   </div>
 
-  <div class="panel-manual">
-    <h2>✋ Registro manual (sin esperar tiempo)</h2>
-    <div class="form-group">
-      <label>N° de lista del estudiante:</label>
-      <input type="number" id="nroManual" class="form-control" placeholder="Ej: 5" min="1">
-    </div>
-    <div class="botones-manual">
-      <button class="btn-manual btn-p" data-marca="P">Puntual</button>
-      <button class="btn-manual btn-a" data-marca="A">Atraso</button>
-      <button class="btn-manual btn-f" data-marca="F">Falta</button>
-      <button class="btn-manual btn-l" data-marca="L">Licencia</button>
-    </div>
+  <div class="boton-cierre">
+    <button class="btn-cerrar" id="btnCerrar">🔒 Finalizar asistencia (marca Falta a quien falte)</button>
   </div>
 
   <div id="panelResultado"></div>
@@ -377,11 +395,11 @@
     const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbxfpAgEthhBQS8R1QyrbwtYFdkPt7BEDG0GGWDCEbQT97sRkaXBxiRszQ7OGWE3FlfL6w/exec";
 
     // ---------------- Recordar la última configuración usada ----------------
-    // Así el profesor no tiene que volver a elegir curso, trimestre, turno,
-    // tolerancia y horarios cada vez que abre la app: se restaura lo último
-    // que usó en este celular.
+    // Así el profesor no tiene que volver a elegir curso, trimestre, turno
+    // y horarios cada vez que abre la app: se restaura lo último que usó
+    // en este celular.
     const CLAVE_CONFIG = 'config_asistencia_v1';
-    const CAMPOS_CONFIG = ['selCurso', 'selTrimestre', 'selTurno', 'tolerancia', 'horaInicio', 'horaFin'];
+    const CAMPOS_CONFIG = ['selCurso', 'selTrimestre', 'selTurno', 'horaInicio', 'horaFin'];
 
     function cargarConfigGuardada() {
       try {
@@ -625,7 +643,7 @@
     }
 
     function construirUrlEscaneo(item) {
-      let url = `${URL_APPS_SCRIPT}?codigo=${encodeURIComponent(item.codigo)}&curso=${encodeURIComponent(item.curso)}&trimestre=${encodeURIComponent(item.trimestre)}&turno=${encodeURIComponent(item.turno)}&horaInicio=${encodeURIComponent(item.horaInicio)}&horaFin=${encodeURIComponent(item.horaFin)}&tolerancia=${encodeURIComponent(item.tolerancia)}`;
+      let url = `${URL_APPS_SCRIPT}?codigo=${encodeURIComponent(item.codigo)}&curso=${encodeURIComponent(item.curso)}&trimestre=${encodeURIComponent(item.trimestre)}&turno=${encodeURIComponent(item.turno)}&horaInicio=${encodeURIComponent(item.horaInicio)}&horaFin=${encodeURIComponent(item.horaFin)}`;
       if (item.timestampOriginal) {
         url += `&timestampOriginal=${encodeURIComponent(item.timestampOriginal)}`;
       }
@@ -760,10 +778,9 @@
       const turno = document.getElementById('selTurno').value;
       const horaInicio = document.getElementById('horaInicio').value;
       const horaFin = document.getElementById('horaFin').value;
-      const tolerancia = document.getElementById('tolerancia').value || '5';
 
       const itemBase = {
-        codigo: textoDecodificado, curso, trimestre, turno, horaInicio, horaFin, tolerancia
+        codigo: textoDecodificado, curso, trimestre, turno, horaInicio, horaFin
       };
 
       // Si ya sabemos que no hay internet, ni intentamos — directo a la cola offline
