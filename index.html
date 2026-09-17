@@ -358,6 +358,7 @@
   <div class="controles">
     <button class="control-btn" id="btnCambiarCamara">🔄 Cambiar cámara</button>
     <button class="control-btn" id="btnPausar">⏸️ Pausar</button>
+    <button class="control-btn" id="btnProbarVoz">🔊 Probar voz</button>
   </div>
 
   <!-- Uso típico: ya llamaste lista (o escaneaste a los que llegaron a
@@ -463,6 +464,7 @@
     const btnCambiarCamara = document.getElementById('btnCambiarCamara');
     const btnPausar = document.getElementById('btnPausar');
     const btnCerrar = document.getElementById('btnCerrar');
+    const btnProbarVoz = document.getElementById('btnProbarVoz');
 
     function reproducirBeep(tipo) {
       try {
@@ -497,7 +499,7 @@
       audioDesbloqueado = true;
       try {
         if ('speechSynthesis' in window) {
-          const aviso = new SpeechSynthesisUtterance(' ');
+          const aviso = new SpeechSynthesisUtterance('listo');
           aviso.volume = 0;
           window.speechSynthesis.speak(aviso);
         }
@@ -513,6 +515,20 @@
     document.addEventListener('click', desbloquearAudio, { once: true });
     document.addEventListener('touchstart', desbloquearAudio, { once: true });
 
+    // Bug conocido de Safari/iOS (y algunos Android): el "motor" de voz se
+    // queda dormido si pasa un rato sin usarse, y después ya no vuelve a
+    // hablar aunque el código esté bien. El truco es despertarlo cada pocos
+    // segundos con un pause()+resume(), que no se escucha pero mantiene el
+    // motor activo.
+    if ('speechSynthesis' in window) {
+      setInterval(() => {
+        try {
+          window.speechSynthesis.pause();
+          window.speechSynthesis.resume();
+        } catch (e) {}
+      }, 5000);
+    }
+
     function obtenerVozEspanol() {
       try {
         const voces = window.speechSynthesis.getVoices();
@@ -526,6 +542,7 @@
       try {
         if (!('speechSynthesis' in window) || !texto) return;
         window.speechSynthesis.cancel(); // corta el anuncio anterior si llegan escaneos seguidos
+        window.speechSynthesis.resume();  // por si el motor se había quedado dormido
         const utterance = new SpeechSynthesisUtterance(texto);
         const voz = obtenerVozEspanol();
         if (voz) utterance.voice = voz;
@@ -653,6 +670,15 @@
       btnPausar.textContent = pausado ? '▶️ Reanudar' : '⏸️ Pausar';
       escaneoBloqueado = pausado;
       if (!pausado) panelResultado.style.display = 'none';
+    });
+
+    // Botón de diagnóstico: al ser un toque directo tuyo, si esto SÍ suena
+    // pero el aviso automático al escanear no, el problema es que el motor
+    // de voz del celular se "duerme" con el tiempo (bug conocido, ya
+    // mitigado arriba con el pause()+resume() periódico). Si esto tampoco
+    // suena, el celular no tiene ninguna voz en español instalada.
+    btnProbarVoz.addEventListener('click', () => {
+      anunciarVoz('Prueba de voz, uno, dos, tres');
     });
 
     // ---------------- Cola de escaneos pendientes (sin conexión) ----------------
