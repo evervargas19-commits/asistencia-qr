@@ -195,6 +195,40 @@
       cursor: pointer;
     }
 
+    .panel-manual {
+      width: 100%;
+      max-width: 480px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      border-radius: 12px;
+      padding: 12px;
+      margin-top: 10px;
+    }
+    .panel-manual h2 {
+      font-size: 0.85rem;
+      margin-bottom: 8px;
+      color: #f1f5f9;
+    }
+    .botones-manual {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-top: 8px;
+    }
+    .btn-manual {
+      padding: 10px 4px;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: white;
+      cursor: pointer;
+    }
+    .btn-manual.btn-p { background: #16a34a; }
+    .btn-manual.btn-a { background: #f59e0b; color: #1c1917; }
+    .btn-manual.btn-f { background: #dc2626; }
+    .btn-manual.btn-l { background: #2563eb; }
+
     #panelResultado {
       width: 100%;
       max-width: 480px;
@@ -319,6 +353,20 @@
     <button class="btn-pendientes" id="btnSincronizarPendientes">📤 <span id="textoPendientes"></span></button>
   </div>
 
+  <div class="panel-manual">
+    <h2>✋ Registro manual (sin esperar tiempo)</h2>
+    <div class="form-group">
+      <label>N° de lista del estudiante:</label>
+      <input type="number" id="nroManual" class="form-control" placeholder="Ej: 5" min="1">
+    </div>
+    <div class="botones-manual">
+      <button class="btn-manual btn-p" data-marca="P">Puntual</button>
+      <button class="btn-manual btn-a" data-marca="A">Atraso</button>
+      <button class="btn-manual btn-f" data-marca="F">Falta</button>
+      <button class="btn-manual btn-l" data-marca="L">Licencia</button>
+    </div>
+  </div>
+
   <div id="panelResultado"></div>
   <div class="estado-carga" id="estadoCarga"></div>
 
@@ -327,6 +375,43 @@
     // PEGA AQUÍ TU URL DE LA APLICACIÓN WEB DE APPS SCRIPT (/exec)
     // -------------------------------------------------------------
     const URL_APPS_SCRIPT = "https://script.google.com/macros/s/AKfycbxfpAgEthhBQS8R1QyrbwtYFdkPt7BEDG0GGWDCEbQT97sRkaXBxiRszQ7OGWE3FlfL6w/exec";
+
+    // ---------------- Recordar la última configuración usada ----------------
+    // Así el profesor no tiene que volver a elegir curso, trimestre, turno,
+    // tolerancia y horarios cada vez que abre la app: se restaura lo último
+    // que usó en este celular.
+    const CLAVE_CONFIG = 'config_asistencia_v1';
+    const CAMPOS_CONFIG = ['selCurso', 'selTrimestre', 'selTurno', 'tolerancia', 'horaInicio', 'horaFin'];
+
+    function cargarConfigGuardada() {
+      try {
+        const guardado = JSON.parse(localStorage.getItem(CLAVE_CONFIG));
+        if (!guardado) return;
+        CAMPOS_CONFIG.forEach(id => {
+          if (guardado[id] !== undefined && guardado[id] !== '') {
+            const el = document.getElementById(id);
+            if (el) el.value = guardado[id];
+          }
+        });
+      } catch (e) {}
+    }
+
+    function guardarConfigActual() {
+      const config = {};
+      CAMPOS_CONFIG.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) config[id] = el.value;
+      });
+      try {
+        localStorage.setItem(CLAVE_CONFIG, JSON.stringify(config));
+      } catch (e) {}
+    }
+
+    cargarConfigGuardada();
+    CAMPOS_CONFIG.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', guardarConfigActual);
+    });
 
     // ---------------- Confirmación visual de AM/PM ----------------
     function formatearHoraLegible(valor24h) {
@@ -558,21 +643,40 @@
         return;
       }
 
+      const TAMANO_LOTE = 5; // varios al mismo tiempo, no uno por uno
       let enviados = 0;
-      let restantes = [];
+      let restantes = cola.slice();
 
-      for (const item of cola) {
-        try {
-          const resp = await fetch(construirUrlEscaneo(item));
-          const texto = await resp.text();
-          JSON.parse(texto); // valida que sea JSON; si falla, se queda en cola
-          enviados++;
-        } catch (e) {
-          restantes.push(item);
-        }
+      estadoCarga.innerHTML = `<span class="spinner"></span> Sincronizando 0 de ${cola.length}...`;
+
+      for (let i = 0; i < cola.length; i += TAMANO_LOTE) {
+        const lote = cola.slice(i, i + TAMANO_LOTE);
+
+        const resultados = await Promise.all(lote.map(async (item) => {
+          try {
+            const resp = await fetch(construirUrlEscaneo(item));
+            const texto = await resp.text();
+            JSON.parse(texto); // valida que sea JSON
+            return { item, ok: true };
+          } catch (e) {
+            return { item, ok: false };
+          }
+        }));
+
+        resultados.forEach(r => {
+          if (r.ok) {
+            enviados++;
+            restantes = restantes.filter(x => x !== r.item);
+            // Guarda el avance YA, después de cada lote — si se corta la señal
+            // a mitad de camino, no se pierde lo que ya se mandó.
+            guardarCola(restantes);
+          }
+        });
+
+        estadoCarga.innerHTML = `<span class="spinner"></span> Sincronizando ${enviados} de ${cola.length}...`;
       }
 
-      guardarCola(restantes);
+      estadoCarga.textContent = '';
       mostrarResultado(
         restantes.length === 0 ? 'exito' : 'advertencia',
         'Sincronización',
@@ -583,6 +687,43 @@
     }
 
     document.getElementById('btnSincronizarPendientes').addEventListener('click', () => sincronizarPendientes(false));
+
+    // ---------------- Registro manual (sin esperar tiempo) ----------------
+    document.querySelectorAll('.btn-manual').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const nro = document.getElementById('nroManual').value.trim();
+        if (!nro) {
+          mostrarResultado('error', 'Falta el N°', 'Escribe el número de lista del estudiante', '');
+          return;
+        }
+        const marca = btn.getAttribute('data-marca');
+        const curso = document.getElementById('selCurso').value;
+        const trimestre = document.getElementById('selTrimestre').value;
+        const turno = document.getElementById('selTurno').value;
+
+        estadoCarga.innerHTML = '<span class="spinner"></span> Registrando manual...';
+
+        if (!navigator.onLine) {
+          estadoCarga.textContent = '';
+          mostrarResultado('error', 'Sin conexión', 'El registro manual necesita internet por ahora — usa el escaneo normal si no hay señal', '');
+          return;
+        }
+
+        const url = `${URL_APPS_SCRIPT}?accion=manual&codigo=${encodeURIComponent(nro)}&curso=${encodeURIComponent(curso)}&trimestre=${encodeURIComponent(trimestre)}&turno=${encodeURIComponent(turno)}&marca=${encodeURIComponent(marca)}`;
+
+        try {
+          const resp = await fetch(url);
+          const texto = await resp.text();
+          const data = JSON.parse(texto);
+          procesarRespuesta(data);
+          document.getElementById('nroManual').value = '';
+        } catch (e) {
+          estadoCarga.textContent = '';
+          mostrarResultado('error', 'Conexión', 'No se pudo registrar: ' + e, '');
+          setTimeout(() => { escaneoBloqueado = false; }, 3000);
+        }
+      });
+    });
 
     window.addEventListener('online', () => {
       mostrarToastConexion();
