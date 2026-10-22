@@ -700,8 +700,10 @@
     function agregarACola(item) {
       const cola = obtenerCola();
       const fechaItem = item.timestampOriginal.substring(0, 10); // yyyy-MM-dd
+      const tipoItem = item.tipo || 'scan';
 
       const yaExiste = cola.some(existente =>
+        (existente.tipo || 'scan') === tipoItem &&
         existente.codigo === item.codigo &&
         existente.curso === item.curso &&
         existente.trimestre === item.trimestre &&
@@ -724,14 +726,19 @@
       const texto = document.getElementById('textoPendientes');
       if (cola.length > 0) {
         cont.style.display = 'block';
-        texto.textContent = `${cola.length} escaneo(s) sin conexión pendientes de enviar`;
+        texto.textContent = `${cola.length} registro(s) sin conexión pendientes de enviar`;
       } else {
         cont.style.display = 'none';
       }
     }
 
     function construirUrlEscaneo(item) {
-      let url = `${URL_APPS_SCRIPT}?codigo=${encodeURIComponent(item.codigo)}&curso=${encodeURIComponent(item.curso)}&trimestre=${encodeURIComponent(item.trimestre)}&turno=${encodeURIComponent(item.turno)}&horaInicio=${encodeURIComponent(item.horaInicio)}&horaFin=${encodeURIComponent(item.horaFin)}`;
+      let url;
+      if (item.tipo === 'manual') {
+        url = `${URL_APPS_SCRIPT}?accion=manual&codigo=${encodeURIComponent(item.codigo)}&curso=${encodeURIComponent(item.curso)}&trimestre=${encodeURIComponent(item.trimestre)}&turno=${encodeURIComponent(item.turno)}&marca=${encodeURIComponent(item.marca)}`;
+      } else {
+        url = `${URL_APPS_SCRIPT}?codigo=${encodeURIComponent(item.codigo)}&curso=${encodeURIComponent(item.curso)}&trimestre=${encodeURIComponent(item.trimestre)}&turno=${encodeURIComponent(item.turno)}&horaInicio=${encodeURIComponent(item.horaInicio)}&horaFin=${encodeURIComponent(item.horaFin)}`;
+      }
       if (item.timestampOriginal) {
         url += `&timestampOriginal=${encodeURIComponent(item.timestampOriginal)}`;
       }
@@ -807,15 +814,20 @@
         const trimestre = document.getElementById('selTrimestre').value;
         const turno = document.getElementById('selTurno').value;
 
+        const itemBase = { tipo: 'manual', codigo: nro, curso, trimestre, turno, marca };
+        const horaCapturada = new Date();
+
         estadoCarga.innerHTML = '<span class="spinner"></span> Registrando manual...';
 
+        // Igual que con el escaneo: si no hay internet, se guarda en la
+        // cola y se manda solo cuando vuelva la señal — ya no bloquea.
         if (!navigator.onLine) {
-          estadoCarga.textContent = '';
-          mostrarResultado('error', 'Sin conexión', 'El registro manual necesita internet por ahora — usa el escaneo normal si no hay señal', '');
+          guardarSinConexion(itemBase, horaCapturada);
+          document.getElementById('nroManual').value = '';
           return;
         }
 
-        const url = `${URL_APPS_SCRIPT}?accion=manual&codigo=${encodeURIComponent(nro)}&curso=${encodeURIComponent(curso)}&trimestre=${encodeURIComponent(trimestre)}&turno=${encodeURIComponent(turno)}&marca=${encodeURIComponent(marca)}`;
+        const url = construirUrlEscaneo(itemBase);
 
         try {
           const resp = await fetch(url);
@@ -824,9 +836,9 @@
           procesarRespuesta(data);
           document.getElementById('nroManual').value = '';
         } catch (e) {
-          estadoCarga.textContent = '';
-          mostrarResultado('error', 'Conexión', 'No se pudo registrar: ' + e, '');
-          setTimeout(() => { escaneoBloqueado = false; }, 3000);
+          // Falló la conexión en el momento del intento -> guardamos offline también
+          guardarSinConexion(itemBase, horaCapturada);
+          document.getElementById('nroManual').value = '';
         }
       });
     });
@@ -903,13 +915,24 @@
     function guardarSinConexion(itemBase, horaCapturada) {
       const item = Object.assign({}, itemBase, { timestampOriginal: horaCapturada.toISOString() });
       const esNuevo = agregarACola(item);
+      const esManual = item.tipo === 'manual';
 
       estadoCarga.textContent = '';
       if (esNuevo) {
-        mostrarResultado('advertencia', 'Guardado sin conexión', 'Retira el carnet — se enviará solo cuando haya internet', Utilities_horaLocal(horaCapturada));
+        mostrarResultado(
+          'advertencia',
+          'Guardado sin conexión',
+          esManual ? 'Se enviará solo cuando haya internet' : 'Retira el carnet — se enviará solo cuando haya internet',
+          Utilities_horaLocal(horaCapturada)
+        );
         anunciarVoz('Guardado');
       } else {
-        mostrarResultado('advertencia', 'Ya registrado (offline)', 'Este carnet ya está en la cola de hoy — retíralo', Utilities_horaLocal(horaCapturada));
+        mostrarResultado(
+          'advertencia',
+          'Ya registrado (offline)',
+          esManual ? 'Este estudiante ya está en la cola de hoy' : 'Este carnet ya está en la cola de hoy — retíralo',
+          Utilities_horaLocal(horaCapturada)
+        );
         anunciarVoz('Ya registrado');
       }
       reproducirBeep('advertencia');
