@@ -1,4 +1,4 @@
-const CACHE_NAME = 'asistencia-qr-v5';
+const CACHE_NAME = 'asistencia-qr-v6';
 const ARCHIVOS = [
   './',
   './index.html',
